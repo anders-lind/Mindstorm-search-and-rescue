@@ -34,4 +34,4 @@ def follow_line(kp,ki,kd,speed):
 
             tank.on(left_speed, right_speed)
 
-follow_line(14,0.0,0,SpeedPercent(70))
+follow_line(14,0.0,0,SpeedPercent(60))
