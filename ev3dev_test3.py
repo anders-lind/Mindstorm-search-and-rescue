@@ -2,23 +2,29 @@
 
 from time import sleep
 import numpy as np
-# import keyboard
+import sys
 
 from ev3dev2.motor import OUTPUT_A, OUTPUT_D, MoveTank, speed_to_speedvalue, SpeedNativeUnits, SpeedPercent
+from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor
-from ev3dev2.sensor import INPUT_1, INPUT_4
 from ev3dev2.display import Display
+from ev3dev2.button import Button
+from ev3dev2.sensor.lego import UltrasonicSensor
+
 
 
 ##### Initialize #####
 print("Initializing")
-enable = True
+enable = True   
 
 # Init
 disp = Display()
 tank = MoveTank(OUTPUT_D, OUTPUT_A)
 cs_left = ColorSensor(INPUT_1)
 cs_right = ColorSensor(INPUT_4)
+distance_sensor = UltrasonicSensor(INPUT_3)
+btn = Button()
+
 
 # PID vars
 errors = []
@@ -37,7 +43,7 @@ max_speed = 0.3
 speed_gain = 2
 
 # Init light sensor skew
-if cs_right.reflected_light_intensity != 0:
+if abs(cs_right.reflected_light_intensity) > 0.1:
     skew = cs_left.reflected_light_intensity/cs_right.reflected_light_intensity
 else:
     skew = 1
@@ -46,12 +52,14 @@ print("Initialized")
 ##### Initialize #####
 
 
-def main():
+def main(): 
+    
+
     input("Press enter to start")
     follow_line()
 
     while (True):
-        i = input("What now? (line follow: 'l', quit: 'q', new gains 'g', print: 'p')")
+        i = input("What now? (Line follow: 'l',    New gains 'g',    Print: 'p',    Quit: 'q')")
         if i == 'q':
             return
         elif i == 'g':
@@ -67,11 +75,11 @@ def new_gains():
     global kp, ki, kd, max_speed, speed_gain
 
     print("Enter new gains:")
-    kp = float(input("P"))
-    ki = float(input("I"))
-    kd = float(input("D"))
-    max_speed = float(input("max speed"))
-    speed_gain = float(input("speed_gain"))
+    kp = float(input("P: "))
+    ki = float(input("I: "))
+    kd = float(input("D: "))
+    max_speed = float(input("max speed: "))
+    speed_gain = float(input("speed_gain: "))
 
     
 
@@ -81,13 +89,10 @@ def follow_line():
     while enable:
         global integral, last_error, speed_native_units
 
-        # # quit
-        # try:
-        #     if keyboard.is_pressed('q'):
-        #         enable = False
-        #         return
-        # except:
-        #     pass
+        # Check input
+        if btn.any():
+            tank.off()
+            return
 
         # Rotational speed
         error =  cs_right.reflected_light_intensity*skew - cs_left.reflected_light_intensity
@@ -98,6 +103,13 @@ def follow_line():
 
         # Linear speed
         speed_scaled = max_speed / ((error/speed_gain)**2 + 1) * speed_native_units
+        if speed_scaled > 1050:
+            print("WARNING: speed_scaled = " + str(speed_scaled) + "  ( > 1050)")
+            speed_scaled = 1050
+        if speed_scaled < -1050:
+            print("WARNING: speed_scaled = " + str(speed_scaled) + "  ( < -1050)")
+            speed_scaled = -1050
+        
 
         # Send speed to wheels
         left_speed = SpeedNativeUnits(speed_scaled - turn_native_units)
