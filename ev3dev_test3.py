@@ -4,15 +4,17 @@ from time import sleep
 import numpy as np
 import sys
 
-from ev3dev2.motor import OUTPUT_A, OUTPUT_D, MoveTank, speed_to_speedvalue, SpeedNativeUnits, SpeedPercent
+from ev3dev2.motor import OUTPUT_A, OUTPUT_D, MoveDifferential, MoveTank, speed_to_speedvalue, SpeedNativeUnits, Motor
 from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor
 from ev3dev2.display import Display
 from ev3dev2.button import Button
 from ev3dev2.sensor.lego import UltrasonicSensor
+from ev3dev2.sound import Sound
+from ev3dev2.wheel import EV3Tire
 
 
-
+ 
 ##### Initialize #####
 print("Initializing")
 enable = True   
@@ -20,10 +22,14 @@ enable = True
 # Init
 disp = Display()
 tank = MoveTank(OUTPUT_D, OUTPUT_A)
+diff = MoveDifferential(OUTPUT_D, OUTPUT_A, EV3Tire, 120)
+grip = Motor()
 cs_left = ColorSensor(INPUT_1)
 cs_right = ColorSensor(INPUT_4)
 distance_sensor = UltrasonicSensor(INPUT_3)
 btn = Button()
+spkr = Sound()
+spkr.set_volume(50)
 
 
 # PID vars
@@ -53,13 +59,8 @@ print("Initialized")
 
 
 def main(): 
-    
-
-    input("Press enter to start")
-    follow_line()
-
     while (True):
-        i = input("What now? (Line follow: 'l',    New gains 'g',    Print: 'p',    Quit: 'q')")
+        i = input("What now? (Line follow: 'l',    detect can: 'd'    New gains 'g',    New diff 'w'    Print: 'p',    Sound: 's',    Reset gripper: 'r'    Test gripper: 't'    Quit: 'q')")
         if i == 'q':
             return
         elif i == 'g':
@@ -68,20 +69,18 @@ def main():
             print(errors)
         elif i == 'l':
             follow_line()
+        elif i == 'd':
+            detect_can()
+        elif i == 'w':
+            new_diff()
+        elif i == 's':
+            sound()
+        elif i == 't':
+            test_gripper()
+        elif i == 'r':
+            reset_gripper()
 
 
-
-def new_gains():
-    global kp, ki, kd, max_speed, speed_gain
-
-    print("Enter new gains:")
-    kp = float(input("P: "))
-    ki = float(input("I: "))
-    kd = float(input("D: "))
-    max_speed = float(input("max speed: "))
-    speed_gain = float(input("speed_gain: "))
-
-    
 
 def follow_line():
     print("Follow line")
@@ -130,5 +129,79 @@ def follow_line():
         print(error)
 
 
+def new_gains():
+    global kp, ki, kd, max_speed, speed_gain
+
+    print("Enter new gains:")
+    kp = float(input("P: "))
+    ki = float(input("I: "))
+    kd = float(input("D: "))
+    max_speed = float(input("max speed: "))
+    speed_gain = float(input("speed_gain: "))
+
+def new_diff():
+    global diff
+    diff = MoveDifferential(OUTPUT_D, OUTPUT_A, EV3Tire, float(input("wheel base [mm]: ")))
+
+def test_gripper():
+    grip.on_for_degrees(10, 360*float(input("No. of rotations: ")))
+
+
+def detect_can():
+    n = 20
+    distances = []
+
+    # turn and save distances
+    diff.turn_degrees(10, -90)
+    distances.append(distance_sensor.distance_centimeters)
+    for i in range(n):
+        diff.turn_degrees(10, 180/n)
+        distances.append(distance_sensor.distance_centimeters)
+        print(distance_sensor.distance_centimeters)
+    
+
+    # Find angle with lowest distance
+    lowest_distance_mm = 300
+    lowest_index = -1
+    for i in range(int(n)):
+        if distances[i] < lowest_distance_mm:
+            lowest_distance_mm = distances[i]
+            lowest_index = i
+    
+
+    print("lowest distance at", lowest_index, lowest_distance_mm)
+    print("Turn:", -180/n*(n-lowest_index))
+    print("n = :", n, "i = ",lowest_index)
+
+    # Go to angle with lowest distance
+    diff.turn_degrees(10, -180/n*(n-lowest_index))
+
+    # Open gripper
+    grip.on_for_degrees(10, 360*-2)
+
+    # Go to can
+    diff.on_for_distance(10, lowest_distance_mm*10)
+    # tank.on_for_seconds(10, 10, 1)
+
+    # Close gripper
+    grip.on_for_degrees(10, 360*4)
+
+    print()
+
+
+def reset_gripper():
+    grip.on_for_degrees(10, 360*-2)
+    
+
+
+def sound():
+    spkr.set_volume(int(input("Volume: ")))
+    spkr.play_song((
+    ('D4', 'e3'),
+    ('D4', 'e3'),
+    ('D4', 'e3'),
+    ('G4', 'h'),
+    ('D5', 'h') )
+    , )
 
 main()
